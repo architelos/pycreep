@@ -1,0 +1,166 @@
+#! /usr/bin/env python
+
+import concurrent.futures
+import requests
+import argparse
+import random
+from urllib.parse import urlparse
+import sys
+import time
+
+
+def print_error(message):
+    print(f"Error: {message}")
+
+    sys.exit()
+
+
+def display(args):
+    print(
+        f"""
+    __       _  __   _   _ __  
+    /_)_(_/_(__/ (__(/__(/_/_)_  v0.0.1
+ .-/   .-/              .-/
+(_/   (_/              (_/
+
+WARNING: Currently, pycreep cannot be exited during execution.
+         This will be fixed in the next major release.
+
+Wordlist  : {args.wordlist}
+UA        : {args.user_agent}
+Target    : {args.url}
+        """
+    )
+
+# -----
+
+
+def make_request(url, method, user_agent):
+    try:
+        ua = {"User-Agent": user_agent}
+        request_fn = getattr(requests, method.lower())
+
+        return (
+            True,
+            request_fn(url, headers=ua)
+        )
+    except requests.exceptions.RequestException as exception:
+        return (
+            False,
+            str(exception)
+        )
+    except AttributeError as exception:
+        return (
+            False,
+            f"invalid request method"
+        )
+
+
+def parse_options():
+    user_agent = random.choice(
+        list(open("defaults/user_agents.txt", "r"))).strip()
+    wordlist = "defaults/wordlist.txt"
+
+    class ArgParser(argparse.ArgumentParser):
+        def error(self, error):
+            raise ValueError(error)
+
+    parser = ArgParser(add_help=False)
+    parser.add_argument("-w", "--wordlist", required=False,
+                        nargs="?", const=wordlist, default=wordlist)
+    parser.add_argument("-t", "--threads", required=False,
+                        nargs="?", type=int, const=25, default=25)
+    parser.add_argument("-ua", "--user-agent", required=False,
+                        nargs="?", const=user_agent, default=user_agent)
+    parser.add_argument("-u", "--url", required=True)
+
+    try:
+        args = parser.parse_args()
+
+        return (
+            True,
+            args
+        )
+    except ValueError as exception:
+        return (
+            False,
+            str(exception)
+        )
+
+
+def parse_url(url):
+    parsed_url = urlparse(url)
+
+    if not parsed_url.scheme:
+        if not parsed_url.query:
+            return f"http://{parsed_url.path}/"
+
+        return f"http://{parsed_url.path}?{parsed_url.query}/"
+
+    if not parsed_url.query:
+        return f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}/"
+    
+    return f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}?{parsed_url.query}/"
+
+
+
+def set_global_words(wordlist):
+    global words
+
+    words = list(open(wordlist, "r"))
+
+
+def scanner(base_url, ua):
+    if words:
+        word = words[0].strip()
+        words.pop(0)
+
+        url = f"{base_url}{word}"
+
+        response = make_request(url, "GET", ua)
+
+        if response[0]:
+            if response[1].status_code != 404:
+                print(f"{response[1].status_code} - /{word} -> {base_url}{word}")
+
+        if not response[0]:
+                print(response[1])
+
+        time.sleep(0.1)
+        scanner(base_url, ua)
+
+
+def create_pool_and_submit(args):
+    url = parse_url(args.url)
+    
+    try:
+        requests.get(url)
+    except requests.exceptions.RequestException:
+        print_error("couldn't connect to destination")
+
+    index = 0
+    thread_pool = concurrent.futures.ThreadPoolExecutor(
+        max_workers=args.threads)
+
+    while (index < args.threads):
+        thread_pool.submit(scanner, url, args.user_agent)
+        index += 1
+
+    thread_pool.shutdown()
+
+
+def main():
+    parsed_options = parse_options()
+
+    if not parsed_options[0]:
+        print_error(parsed_options[1])
+
+    args = parsed_options[1]
+
+    display(args)
+    set_global_words(args.wordlist)
+    create_pool_and_submit(args)
+
+
+if __name__ == "__main__":
+    main()
