@@ -23,9 +23,6 @@ def display(args):
  .-/   .-/              .-/
 (_/   (_/              (_/
 
-WARNING: Currently, pycreep cannot be exited during execution.
-         This will be fixed in the next major release.
-
 Wordlist  : {args.wordlist}
 UA        : {args.user_agent}
 Target    : {args.url}
@@ -99,18 +96,22 @@ def parse_url(url):
 
     if not parsed_url.query:
         return f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}/"
-    
+
     return f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}?{parsed_url.query}/"
 
 
-
-def set_global_words(wordlist):
+def set_global_vars(wordlist):
     global words
+    global _quit
 
     words = list(open(wordlist, "r"))
+    _quit = False
 
 
 def scanner(base_url, ua):
+    if _quit:
+        return
+
     if words:
         word = words[0].strip()
         words.pop(0)
@@ -121,18 +122,18 @@ def scanner(base_url, ua):
 
         if response[0]:
             if response[1].status_code != 404:
-                print(f"{response[1].status_code} - /{word} -> {base_url}{word}")
+                print(
+                    f"{response[1].status_code} - /{word} -> {base_url}{word}")
 
         if not response[0]:
-                print(response[1])
+            print(response[1])
 
-        time.sleep(0.1)
         scanner(base_url, ua)
 
 
 def create_pool_and_submit(args):
     url = parse_url(args.url)
-    
+
     try:
         requests.get(url)
     except requests.exceptions.RequestException:
@@ -144,6 +145,8 @@ def create_pool_and_submit(args):
 
     while (index < args.threads):
         thread_pool.submit(scanner, url, args.user_agent)
+
+        time.sleep(0.1)
         index += 1
 
     thread_pool.shutdown()
@@ -158,9 +161,14 @@ def main():
     args = parsed_options[1]
 
     display(args)
-    set_global_words(args.wordlist)
+    set_global_vars(args.wordlist)
     create_pool_and_submit(args)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("Ctrl + C detected, killing threads...")
+
+        _quit = True
