@@ -18,7 +18,7 @@ def print_error(message):
 def display(args):
     print(
         f"""
-    __       _  __   _   _ __  
+    __       _  __   _   _ __
     /_)_(_/_(__/ (__(/__(/_/_)_  v0.2.0
  .-/   .-/              .-/
 (_/   (_/              (_/
@@ -118,16 +118,17 @@ def scanner(base_url, ua):
 
         scanner(base_url, ua)
 
-def url_check(url):
-        try:
-            requests.get(url)
-        except requests.exceptions.RequestException as exception:
-            error = str(exception)
 
-            if "Invalid URL" in error:
-                message = "invalid URL"
-            else:
-                message = "couldn't connect to destination"
+def url_check(url, ua):
+    response = make_request(url, "GET", ua)
+
+    if not response[0]:
+        error = response[1]
+
+        if "Invalid URL" in error:
+            message = "invalid URL"
+        else:
+            message = "could not connect to destination"
 
             print_error(message)
 
@@ -135,15 +136,16 @@ def url_check(url):
 def create_pool_and_submit(args):
     futures = []
     url = args.url
+    ua = args.user_agent
 
-    url_check(url)
+    url_check(url, ua)
 
     index = 0
     thread_pool = concurrent.futures.ThreadPoolExecutor(
         max_workers=args.threads)
 
     while index < args.threads:
-        future = thread_pool.submit(scanner, url, args.user_agent)
+        future = thread_pool.submit(scanner, url, ua)
         futures.append(future)
 
         time.sleep(0.1)
@@ -151,7 +153,7 @@ def create_pool_and_submit(args):
 
     for future in futures:
         if not future.done():
-            pass # necessary
+            pass  # necessary
 
     thread_pool.shutdown()
 
