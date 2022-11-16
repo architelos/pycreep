@@ -1,22 +1,28 @@
 # pycreep
 A simple forced browsing tool, inspired by feroxbuster.
 
+# CLI arguments
+
+| Name/Alias      | Description                |
+|-----------------|----------------------------|
+| -u/--url        | The target URL to scan.    |
+| -w/--wordlist   | Wordlist to use.           |
+| -t/--threads    | Amount of threads to set.  |
+| -ua/-user-agent | User-Agent request header. |
+
+
 # Usage
-Current CLI arguments:
-`-u URL -w WORDLIST -t THREADS -ua USER-AGENT`
-
-
 With `python`:
 ```bash
-$ python pycreep ...
+$ python src\pycreep ...
 ```
 
 On Linux:
 ```bash
-$ ./pycreep ...
+$ ./src/pycreep ...
 ```
 
 On Windows:
 ```bash
-$ .\pycreep.exe ...
+$ .\src\pycreep.exe ...
 ```
