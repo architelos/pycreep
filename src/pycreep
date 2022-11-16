@@ -1,0 +1,178 @@
+#! /usr/bin/env python
+
+import concurrent.futures
+import requests
+import argparse
+import random
+import urllib.parse
+import sys
+import time
+
+
+def print_error(message):
+    print(f"Error: {message}")
+
+    sys.exit()
+
+
+def display(args):
+    print(
+        f"""
+    __       _  __   _   _ __  
+    /_)_(_/_(__/ (__(/__(/_/_)_  v0.2.0
+ .-/   .-/              .-/
+(_/   (_/              (_/
+
+Wordlist  : {args.wordlist}
+UA        : {args.user_agent}
+Target    : {args.url}
+        """
+    )
+
+# -----
+
+
+def make_request(url, method, user_agent):
+    try:
+        ua = {"User-Agent": user_agent}
+        request_fn = getattr(requests, method.lower())
+
+        return (
+            True,
+            request_fn(url, headers=ua)
+        )
+    except requests.exceptions.RequestException as exception:
+        return (
+            False,
+            str(exception)
+        )
+    except AttributeError as exception:
+        return (
+            False,
+            f"invalid request method"
+        )
+
+
+def parse_options():
+    user_agent = random.choice(
+        list(open("defaults/user_agents.txt", "r"))).strip()
+    wordlist = "defaults/wordlist.txt"
+
+    class ArgParser(argparse.ArgumentParser):
+        def error(self, error):
+            raise ValueError(error)
+
+    parser = ArgParser(add_help=False)
+    parser.add_argument("-w", "--wordlist", required=False,
+                        nargs="?", const=wordlist, default=wordlist)
+    parser.add_argument("-t", "--threads", required=False,
+                        nargs="?", type=int, const=25, default=25)
+    parser.add_argument("-ua", "--user-agent", required=False,
+                        nargs="?", const=user_agent, default=user_agent)
+    parser.add_argument("-u", "--url", required=True)
+
+    try:
+        args = parser.parse_args()
+
+        return (
+            True,
+            args
+        )
+    except ValueError as exception:
+        return (
+            False,
+            str(exception)
+        )
+
+
+def join_url(url, path):
+    return urllib.parse.urljoin(url, path)
+
+
+def set_global_vars(wordlist):
+    global words
+    global _quit
+
+    words = list(open(wordlist, "r"))
+    _quit = False
+
+
+def scanner(base_url, ua):
+    if _quit:
+        return
+
+    if words:
+        word = words[0].strip()
+        words.pop(0)
+
+        url = join_url(base_url, word)
+        response = make_request(url, "GET", ua)
+
+        if response[0]:
+            if response[1].status_code != 404:
+                print(
+                    f"{response[1].status_code} - /{word} -> {url}")
+
+        if not response[0]:
+            print(response[1])
+
+        scanner(base_url, ua)
+
+def url_check(url):
+        try:
+            requests.get(url)
+        except requests.exceptions.RequestException as exception:
+            error = str(exception)
+
+            if "Invalid URL" in error:
+                message = "invalid URL"
+            else:
+                message = "couldn't connect to destination"
+
+            print_error(message)
+
+
+def create_pool_and_submit(args):
+    futures = []
+    url = args.url
+
+    url_check(url)
+
+    index = 0
+    thread_pool = concurrent.futures.ThreadPoolExecutor(
+        max_workers=args.threads)
+
+    while index < args.threads:
+        future = thread_pool.submit(scanner, url, args.user_agent)
+        futures.append(future)
+
+        time.sleep(0.1)
+        index += 1
+
+    for future in futures:
+        if not future.done():
+            pass # necessary
+
+    thread_pool.shutdown()
+
+
+def main():
+    parsed_options = parse_options()
+
+    if not parsed_options[0]:
+        print_error(parsed_options[1])
+
+    args = parsed_options[1]
+
+    display(args)
+    set_global_vars(args.wordlist)
+    create_pool_and_submit(args)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("Ctrl + C detected, killing threads...")
+
+        _quit = True
